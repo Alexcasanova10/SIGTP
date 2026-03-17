@@ -65,18 +65,18 @@ app.get('/api/test-db', async (req, res) => {
 
 
 
-/*
 //Importar rutas
-const usuarioRoute = require("./routes/Registro/apis-usuario.js")
+const sesionUsuarioRoute = require("./src/routes/SesionUsuario/apis-sesion")
 
-const calidadRoute = require("./routes/Usuarios/apis-calidad.js")
-const operadorRoute = require("./routes/Usuarios/apis-operador.js")
-const supervisorRoute = require("./routes/Usuarios/apis-supervisor.js")
+// const calidadRoute = require("./routes/Usuarios/apis-calidad.js")
+// const operadorRoute = require("./routes/Usuarios/apis-operador.js")
+// const supervisorRoute = require("./routes/Usuarios/apis-supervisor.js")
 
 
-//Route Sesiones
-app.use("/api/usuario",usuarioRoute)
+//Route SesionesUsuario
+app.use("/api/sesiones",sesionUsuarioRoute)
 
+/*
 //Route calidad
 app.use("/api/calidad",calidadRoute)
 
