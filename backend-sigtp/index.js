@@ -68,6 +68,9 @@ app.get('/api/test-db', async (req, res) => {
 //Importar rutas
 const sesionUsuarioRoute = require("./src/routes/SesionUsuario/apis-sesion")
 
+// RUTAS DE EJEMPLO
+const protectedRoute = require("./src/routes/SesionUsuario/protegidasRoutes")
+
 // const calidadRoute = require("./routes/Usuarios/apis-calidad.js")
 // const operadorRoute = require("./routes/Usuarios/apis-operador.js")
 // const supervisorRoute = require("./routes/Usuarios/apis-supervisor.js")
@@ -75,6 +78,9 @@ const sesionUsuarioRoute = require("./src/routes/SesionUsuario/apis-sesion")
 
 //Route SesionesUsuario
 app.use("/api/sesiones",sesionUsuarioRoute)
+
+//Route protegidas EJEMPLO
+app.use("/api/protegidas",protectedRoute)
 
 /*
 //Route calidad

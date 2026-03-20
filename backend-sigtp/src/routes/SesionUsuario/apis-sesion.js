@@ -3,6 +3,9 @@ const usuarioRoute = express.Router();
 const AsyncHandler = require("express-async-handler");
 const Usuario = require("../../models/Usuario");
 const Rol = require("../../models/Rol");
+const protect = require("../../middlewares/Auth");
+
+
 const generateToken = require("../../tokenGenerate");
 const bcrypt = require('bcryptjs');
 const { sequelize } = require('../../models');
@@ -141,8 +144,185 @@ usuarioRoute.post("/registro-usuario", AsyncHandler(async (req, res) => {
     })
 );
 
-// API LOGIN DE USUARIO
-usuarioRoute.post("/login", AsyncHandler(async (req, res) => {}))
+
+// API LOGIN
+usuarioRoute.post("/login", 
+    AsyncHandler(async (req, res) => {
+        try {
+            const { nombre, password } = req.body;
+
+            // Validar que vengan los campos requeridos
+            if (!nombre || !password) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Nombre de usuario y contraseña son requeridos"
+                });
+            }
+
+            // Buscar usuario por nombre e incluir su rol
+            const usuario = await Usuario.findOne({
+                where: { 
+                    nombre: nombre,
+                    activo: true // Solo usuarios activos pueden iniciar sesión
+                },
+                include: [{
+                    model: Rol,
+                    attributes: ['id', 'nombre', 'descripcion']
+                }]
+            });
+
+            // Verificar si el usuario existe
+            if (!usuario) {
+                return res.status(401).json({
+                    success: false,
+                    message: "Credenciales inválidas"
+                });
+            }
+
+            // Verificar la contraseña
+            const passwordValida = await bcrypt.compare(password, usuario.password);
+            
+            if (!passwordValida) {
+                return res.status(401).json({
+                    success: false,
+                    message: "Credenciales inválidas"
+                });
+            }
+
+            // Generar token JWT
+            const token = generateToken(usuario.id);
+
+            // Configurar la sesión (opcional, si usas sesiones)
+            if (req.session) {
+                req.session.user = {
+                    id: usuario.id,
+                    nombre: usuario.nombre,
+                    numero_empleado: usuario.numero_empleado,
+                    rol: usuario.rol,
+                    activo: usuario.activo
+                };
+            }
+
+            // Determinar la vista/redirección según el rol
+            // const vistaSegunRol = {
+            //     1: '/produccion',      // Operador
+            //     2: '/calidad',          // Calidad
+            //     3: '/supervisor',       // Supervisor
+            //     4: '/tecnico',          // Técnico
+            //     5: '/ingenieria',       // Ingeniero
+            //     6: '/gerencia'          // Gerente
+            // };
+
+            // const vistaDestino = vistaSegunRol[usuario.rol_id] || '/dashboard';
+
+            // Respuesta exitosa con token y datos del usuario
+            res.json({
+                success: true,
+                message: "Inicio de sesión exitoso",
+                data: {
+                    token: token,
+                    usuario: {
+                        id: usuario.id,
+                        nombre: usuario.nombre,
+                        numero_empleado: usuario.numero_empleado,
+                        // rol: {
+                        //     id: usuario.rol.id,
+                        //     nombre: usuario.rol.nombre,
+                        //     descripcion: usuario.rol.descripcion
+                        // },
+                        activo: usuario.activo
+                    },
+                    // redireccion: {
+                    //     vista: vistaDestino,
+                    //     rol_nombre: usuario.rol.nombre
+                    // }
+                }
+            });
+
+        } catch (error) {
+            console.error('Error en login:', error);
+            res.status(500).json({
+                success: false,
+                message: "Error interno del servidor"
+            });
+        }
+    })
+);
+
+// API LOGOUT 
+usuarioRoute.post("/logout", 
+    AsyncHandler(async (req, res) => {
+        try {
+            // Opción 1: Si estás usando sesiones (express-session)
+            if (req.session) {
+                req.session.destroy((err) => {
+                    if (err) {
+                        console.error('Error destruyendo sesión:', err);
+                        return res.status(500).json({
+                            success: false,
+                            message: "Error al cerrar sesión"
+                        });
+                    }
+                    
+                    // Limpiar cookie de sesión
+                    res.clearCookie('connect.sid'); // Nombre por defecto de la cookie de sesión
+                    
+                    return res.json({
+                        success: true,
+                        message: "Sesión cerrada exitosamente"
+                    });
+                });
+            } 
+            // Opción 2: Si solo usas JWT (el logout es client-side)
+            else {
+                // Con JWT, el logout se maneja del lado del cliente eliminando el token
+                // Pero podemos dar una respuesta exitosa
+                return res.json({
+                    success: true,
+                    message: "Sesión cerrada exitosamente. Elimina el token del lado del cliente."
+                });
+            }
+        } catch (error) {
+            console.error('Error en logout:', error);
+            res.status(500).json({
+                success: false,
+                message: "Error interno del servidor"
+            });
+        }
+    })
+);
+
+// API PERFIL
+usuarioRoute.get("/perfil", protect, AsyncHandler(async (req, res) => {
+  try {
+    // El usuario ya viene completo del middleware protect
+    // Solo necesitamos devolver la información
+    const usuario = req.usuario;
+
+    res.json({
+      success: true,
+      data: {
+        id: usuario.id,
+        nombre: usuario.nombre,
+        numero_empleado: usuario.numero_empleado,
+        rol: usuario.rol ? {
+          id: usuario.rol.id,
+          nombre: usuario.rol.nombre,
+          descripcion: usuario.rol.descripcion
+        } : null,
+        activo: usuario.activo,
+        fecha_creacion: usuario.fecha_creacion
+      }
+    });
+
+  } catch (error) {
+    console.error('Error en perfil:', error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener perfil"
+    });
+  }
+}));
 
 // API PARA OBTENER ROLES DISPONIBLES (útil para el frontend)
 usuarioRoute.get("/roles-disponibles",
