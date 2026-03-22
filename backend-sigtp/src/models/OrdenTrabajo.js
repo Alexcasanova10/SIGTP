@@ -33,4 +33,5 @@ const OrdenTrabajo = sequelize.define('ordenes_trabajo', {
     timestamps: false
 });
 
+// Relación con Piezas (se define después de importar Pieza)
 module.exports = OrdenTrabajo;

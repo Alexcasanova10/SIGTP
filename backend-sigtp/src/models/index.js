@@ -44,8 +44,8 @@ Usuario.hasMany(Notificacion, { foreignKey: 'usuario_id' });
 Notificacion.belongsTo(Usuario, { foreignKey: 'usuario_id' });
 
 // OrdenTrabajo - Pieza (1:N)
-OrdenTrabajo.hasMany(Pieza, { foreignKey: 'orden_id' });
-Pieza.belongsTo(OrdenTrabajo, { foreignKey: 'orden_id' });
+// OrdenTrabajo.hasMany(Pieza, { foreignKey: 'orden_id' });
+// Pieza.belongsTo(OrdenTrabajo, { foreignKey: 'orden_id' });
 
 // OrdenTrabajo - ParoLinea (1:N)
 OrdenTrabajo.hasMany(ParoLinea, { foreignKey: 'orden_id' });
@@ -55,9 +55,30 @@ ParoLinea.belongsTo(OrdenTrabajo, { foreignKey: 'orden_id' });
 OrdenTrabajo.hasMany(FallaTecnica, { foreignKey: 'orden_id' });
 FallaTecnica.belongsTo(OrdenTrabajo, { foreignKey: 'orden_id' });
 
-// Estacion - Pieza (1:N)
-Estacion.hasMany(Pieza, { foreignKey: 'estacion_actual_id' });
-Pieza.belongsTo(Estacion, { foreignKey: 'estacion_actual_id' });
+
+// Relación: Una orden tiene muchas piezas 
+// //OrdenTRabajo - Pieza (1:N)
+OrdenTrabajo.hasMany(Pieza, {foreignKey: 'orden_id',as: 'piezas' });
+Pieza.belongsTo(OrdenTrabajo, { foreignKey: 'orden_id', as: 'orden'});
+
+
+
+// // Estacion - Pieza (1:N)
+// Estacion.hasMany(Pieza, { foreignKey: 'estacion_actual_id' });
+// Pieza.belongsTo(Estacion, { foreignKey: 'estacion_actual_id' });
+
+// Estacion - Pieza (1:N) - CORREGIDO CON ALIAS
+Estacion.hasMany(Pieza, { 
+    foreignKey: 'estacion_actual_id', 
+    as: 'piezas'  // Una estación tiene muchas piezas
+});
+Pieza.belongsTo(Estacion, { 
+    foreignKey: 'estacion_actual_id', 
+    as: 'estacion'  // Una pieza pertenece a una estación
+});
+
+
+
 
 // Pieza - InspeccionCalidad (1:N)
 Pieza.hasMany(InspeccionCalidad, { foreignKey: 'pieza_id' });
