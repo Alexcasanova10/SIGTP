@@ -5,7 +5,6 @@ const Usuario = require("../../models/Usuario");
 const Rol = require("../../models/Rol");
 const protect = require("../../middlewares/Auth");
 
-
 const generateToken = require("../../tokenGenerate");
 const bcrypt = require('bcryptjs');
 const { sequelize } = require('../../models');

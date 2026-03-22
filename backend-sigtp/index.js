@@ -71,9 +71,12 @@ const sesionUsuarioRoute = require("./src/routes/SesionUsuario/apis-sesion")
 // RUTAS DE EJEMPLO
 const protectedRoute = require("./src/routes/SesionUsuario/protegidasRoutes")
 
+const supervisorRoute = require("./src/routes/Perfiles/apis-supervisor")
+
+const operadorRoute = require("./src/routes/Perfiles/apis-operador.js")
+
+
 // const calidadRoute = require("./routes/Usuarios/apis-calidad.js")
-// const operadorRoute = require("./routes/Usuarios/apis-operador.js")
-// const supervisorRoute = require("./routes/Usuarios/apis-supervisor.js")
 
 
 //Route SesionesUsuario
@@ -82,16 +85,16 @@ app.use("/api/sesiones",sesionUsuarioRoute)
 //Route protegidas EJEMPLO
 app.use("/api/protegidas",protectedRoute)
 
-/*
-//Route calidad
-app.use("/api/calidad",calidadRoute)
+//Route supervisor
+app.use("/api/supervisor",supervisorRoute)
 
 //Route operador
 app.use("/api/operador",operadorRoute)
 
-//Route supervisor
-app.use("/api/supervisor",supervisorRoute)
 
+/*
+//Route calidad
+app.use("/api/calidad",calidadRoute)
 
 const gerenteRoute = require("./routes/Usuarios/gerente-apis-.js")
 const ingRoute = require("./routes/Usuarios/apis-ing-procesos.js")
