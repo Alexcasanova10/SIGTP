@@ -6,8 +6,9 @@ const Rol = require("../../models/Rol");
 const Pieza = require("../../models/Pieza");
 const OrdenTrabajo = require("../../models/OrdenTrabajo");
 const Estacion = require("../../models/Estacion");
+const Movimiento = require("../../models/Movimiento");
+
 const protect = require("../../middlewares/Auth");
-const bcrypt = require('bcryptjs');
 const { sequelize } = require('../../models');
 const { Op } = require('sequelize');
 require('dotenv').config();

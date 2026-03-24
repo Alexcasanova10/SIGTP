@@ -6,6 +6,7 @@ const Rol = require("../../models/Rol");
 const Estacion = require("../../models/Estacion");
 const OrdenTrabajo = require("../../models/OrdenTrabajo");
 const Pieza = require("../../models/Pieza"); 
+const Movimiento = require("../../models/Movimiento");
 const protect = require("../../middlewares/Auth");
 const { sequelize } = require('../../models');
 require('dotenv').config();
@@ -66,7 +67,7 @@ const generarSerialPCB = async (orden_id, numeroConsecutivo) => {
 };
 
 // API CREAR ORDEN DE TRABAJO (con creación automática de seriales de piezas)
-supervisorRoute.post("/generar-orden-trabajo", 
+/*supervisorRoute.post("/generar-orden-trabajo", 
     AsyncHandler(async (req, res) => {
         const transaction = await sequelize.transaction();
         
@@ -178,7 +179,164 @@ supervisorRoute.post("/generar-orden-trabajo",
             });
         }
     })
+);*/
+
+// API CREAR ORDEN DE TRABAJO (con creación automática de seriales de piezas y registro de movimientos) --EXPERTMENTAL
+supervisorRoute.post("/generar-orden-trabajo", 
+    AsyncHandler(async (req, res) => {
+        const transaction = await sequelize.transaction();
+        
+        try {
+            const { cantidad_planeada, estacion_actual_id } = req.body;
+            
+            // TEMPORAL: Usar un usuario fijo (ID 1) hasta que tengas el middleware
+            // Cambia esto por req.usuario.id cuando tengas el middleware
+            const usuarioId = 1; // Supervisor que crea la orden
+            
+            // Validaciones
+            if (!cantidad_planeada) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: "La cantidad planeada es requerida"
+                });
+            }
+            
+            if (cantidad_planeada <= 0) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: "La cantidad planeada debe ser mayor a 0"
+                });
+            }
+            
+            // Validar estación si se proporcionó
+            if (estacion_actual_id) {
+                const estacionExistente = await Estacion.findByPk(estacion_actual_id, { transaction });
+                if (!estacionExistente) {
+                    await transaction.rollback();
+                    return res.status(404).json({
+                        success: false,
+                        message: `Estación con ID ${estacion_actual_id} no encontrada`
+                    });
+                }
+            }
+            
+            // Verificar que el usuario existe
+            const usuarioExiste = await Usuario.findByPk(usuarioId, { transaction });
+            if (!usuarioExiste) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: `El usuario con ID ${usuarioId} no existe en la base de datos`
+                });
+            }
+            
+            // Generar número de orden automático
+            const numeroOrden = await generarNumeroOrden();
+            
+            // Crear la orden de trabajo
+            const nuevaOrden = await OrdenTrabajo.create({
+                numero_orden: numeroOrden,
+                cantidad_planeada: cantidad_planeada,
+                estatus: 'Planeada',
+                fecha_inicio: new Date(),
+                fecha_fin: null
+            }, { transaction });
+            
+            // Crear los seriales de las piezas según la cantidad planeada
+            const piezasCreadas = [];
+            const movimientosCreados = [];
+            
+            for (let i = 1; i <= cantidad_planeada; i++) {
+                // Generar serial para cada pieza
+                const serial = await generarSerialPCB(nuevaOrden.id, i);
+                
+                // Crear la pieza
+                const nuevaPieza = await Pieza.create({
+                    serial: serial,
+                    orden_id: nuevaOrden.id,
+                    estacion_actual_id: estacion_actual_id || null,
+                    estatus: 'En Proceso SMT',
+                    fecha_registro: new Date()
+                }, { transaction });
+                
+                piezasCreadas.push({
+                    id: nuevaPieza.id,
+                    serial: nuevaPieza.serial
+                });
+                
+                // REGISTRAR MOVIMIENTO DE CREACIÓN DE LA PIEZA
+                const movimiento = await Movimiento.create({
+                    pieza_id: nuevaPieza.id,
+                    estatus_anterior: null, // No hay estatus anterior porque se acaba de crear
+                    estatus_nuevo: 'En Proceso SMT',
+                    cambiado_por: usuarioId,
+                    fecha: new Date()
+                }, { transaction });
+                
+                movimientosCreados.push({
+                    id: movimiento.id,
+                    pieza_id: nuevaPieza.id,
+                    serial: nuevaPieza.serial,
+                    estatus_nuevo: 'En Proceso SMT'
+                });
+            }
+            
+            // Commit de la transacción
+            await transaction.commit();
+            
+            // Respuesta exitosa con detalles de la orden, piezas y movimientos
+            res.status(201).json({
+                success: true,
+                message: `Orden de trabajo creada exitosamente con ${cantidad_planeada} piezas`,
+                data: {
+                    orden: {
+                        id: nuevaOrden.id,
+                        numero_orden: nuevaOrden.numero_orden,
+                        cantidad_planeada: nuevaOrden.cantidad_planeada,
+                        estatus: nuevaOrden.estatus,
+                        fecha_inicio: nuevaOrden.fecha_inicio,
+                        fecha_fin: nuevaOrden.fecha_fin
+                    },
+                    piezas: piezasCreadas,
+                    movimientos: {
+                        total: movimientosCreados.length,
+                        registros: movimientosCreados
+                    },
+                    resumen: {
+                        total_piezas_creadas: piezasCreadas.length,
+                        estacion_inicial: estacion_actual_id || 'No especificada',
+                        usuario_creador: usuarioExiste.nombre
+                    }
+                }
+            });
+            
+        } catch (error) {
+            await transaction.rollback();
+            console.error('Error creando orden de trabajo:', error);
+            
+            if (error.name === 'SequelizeUniqueConstraintError') {
+                return res.status(400).json({
+                    success: false,
+                    message: "Error: Número de orden duplicado, intenta nuevamente"
+                });
+            }
+            
+            res.status(500).json({
+                success: false,
+                message: "Error interno al crear la orden de trabajo",
+                error: error.message
+            });
+        }
+    })
 );
+
+
+
+
+
+
 
 
 // API CONSULTAR ORDEN DE TRABAJO CON SUS PIEZAS
@@ -221,9 +379,9 @@ supervisorRoute.get("/orden-trabajo/numero/:numero_orden",
     })
 );
 
-
-// API CONSULTAR ORDEN DE TRABAJO CON SUS PIEZAS (ESTADISTICAS)
-supervisorRoute.get("/orden-trabajo/:numero_orden", 
+//**********MEJORAR
+// API ESTADISTICAS DE ORDEN DE TRABAJO // cuales ordenes estan en “en proceso smt”, “en calidad” “ok” “retrabajo” y “scrap” 
+supervisorRoute.get("/orden-trabajo/estadistica/:numero_orden", 
     AsyncHandler(async (req, res) => {
         try {
 
@@ -275,6 +433,9 @@ supervisorRoute.get("/orden-trabajo/:numero_orden",
         }
     })
 );
+
+
+
 
 // API LISTAR TODAS LAS ÓRDENES DE TRABAJO
 supervisorRoute.get("/ordenes-trabajo", 

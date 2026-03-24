@@ -61,12 +61,6 @@ FallaTecnica.belongsTo(OrdenTrabajo, { foreignKey: 'orden_id' });
 OrdenTrabajo.hasMany(Pieza, {foreignKey: 'orden_id',as: 'piezas' });
 Pieza.belongsTo(OrdenTrabajo, { foreignKey: 'orden_id', as: 'orden'});
 
-
-
-// // Estacion - Pieza (1:N)
-// Estacion.hasMany(Pieza, { foreignKey: 'estacion_actual_id' });
-// Pieza.belongsTo(Estacion, { foreignKey: 'estacion_actual_id' });
-
 // Estacion - Pieza (1:N) - CORREGIDO CON ALIAS
 Estacion.hasMany(Pieza, { 
     foreignKey: 'estacion_actual_id', 
@@ -76,8 +70,6 @@ Pieza.belongsTo(Estacion, {
     foreignKey: 'estacion_actual_id', 
     as: 'estacion'  // Una pieza pertenece a una estación
 });
-
-
 
 
 // Pieza - InspeccionCalidad (1:N)

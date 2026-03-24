@@ -72,11 +72,8 @@ const sesionUsuarioRoute = require("./src/routes/SesionUsuario/apis-sesion")
 const protectedRoute = require("./src/routes/SesionUsuario/protegidasRoutes")
 
 const supervisorRoute = require("./src/routes/Perfiles/apis-supervisor")
-
 const operadorRoute = require("./src/routes/Perfiles/apis-operador.js")
-
-
-// const calidadRoute = require("./routes/Usuarios/apis-calidad.js")
+const calidadRoute = require("./src/routes/Perfiles/apis-calidad.js")
 
 
 //Route SesionesUsuario
@@ -91,10 +88,10 @@ app.use("/api/supervisor",supervisorRoute)
 //Route operador
 app.use("/api/operador",operadorRoute)
 
-
-/*
 //Route calidad
 app.use("/api/calidad",calidadRoute)
+
+/*
 
 const gerenteRoute = require("./routes/Usuarios/gerente-apis-.js")
 const ingRoute = require("./routes/Usuarios/apis-ing-procesos.js")
