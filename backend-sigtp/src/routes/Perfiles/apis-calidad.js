@@ -15,8 +15,8 @@ require('dotenv').config();
 
 
 // API 1: PARA ACTUALIZAR ESTADO DE PIEZA Y REGISTRAR INSPECCIÓN DE CALIDAD //OMITIR MIDDLWARE POR EL MOMENTO
-calidadRoute.put("/actualizar-estado-pieza/:id", 
-    // protect, // COMENTADO TEMPORALMENTE HASTA QUE EL MIDDLEWARE ESTÉ LISTO
+/*calidadRoute.put("/actualizar-estado-pieza/:id", 
+    // protect, // COMENTADO TEMPORALMENTE HASTA QUE EL MIDDLEWARE ESTÉ LISTO , NO TOMAR EN CUENTA
     AsyncHandler(async (req, res) => {
         const transaction = await sequelize.transaction();
         
@@ -147,31 +147,159 @@ calidadRoute.put("/actualizar-estado-pieza/:id",
             });
         }
     })
+);*/
+
+// API: ACTUALIZAR ESTADO DE PIEZA POR SERIAL Y REGISTRAR MOVIMIENTO
+calidadRoute.put("/actualizar-estado-pieza/:serial", 
+    AsyncHandler(async (req, res) => {
+        const transaction = await sequelize.transaction();
+        
+        try {
+            const { serial } = req.params; // Ahora recibimos el SERIAL (ej: SN-KIA-011)
+            const { resultado, descripcion_falla } = req.body;
+            
+            // 1. Validar que el resultado sea válido
+            const resultadosValidos = ['OK', 'Retrabajo', 'Scrap'];
+            if (!resultado || !resultadosValidos.includes(resultado)) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: `Resultado inválido. Debe ser uno de: ${resultadosValidos.join(', ')}`
+                });
+            }
+            
+            // 2. Validar descripción de falla para dictámenes negativos
+            if ((resultado === 'Retrabajo' || resultado === 'Scrap') && !descripcion_falla) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: `Para resultado "${resultado}" es obligatorio proporcionar una descripción de la falla`
+                });
+            }
+            
+            // 3. Buscar la pieza por SERIAL
+            const pieza = await Pieza.findOne({ 
+                where: { serial: serial },
+                transaction,
+                include: [
+                    {
+                        model: OrdenTrabajo,
+                        as: 'orden',
+                        attributes: ['id', 'numero_orden', 'estatus']
+                    }
+                ]
+            });
+            
+            if (!pieza) {
+                await transaction.rollback();
+                return res.status(404).json({
+                    success: false,
+                    message: `Pieza con serial ${serial} no encontrada`
+                });
+            }
+            
+            // 4. Verificar que la pieza esté realmente en "En Calidad"
+            if (pieza.estatus !== 'En Calidad') {
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: `La pieza está en "${pieza.estatus}". Solo se pueden inspeccionar piezas en "En Calidad"`,
+                });
+            }
+            
+            // ID del inspector (Usuario de calidad)
+            const usuarioId = 4; 
+            const estatusAnterior = pieza.estatus;
+            const nuevoEstatus = resultado; // OK, Retrabajo o Scrap
+            
+            // 5. ACTUALIZAR ESTATUS DE LA PIEZA
+            await pieza.update({
+                estatus: nuevoEstatus
+            }, { transaction });
+
+            // 6. REGISTRAR EL MOVIMIENTO (Trazabilidad)
+            await Movimiento.create({
+                pieza_id: pieza.id,
+                estatus_anterior: estatusAnterior,
+                estatus_nuevo: nuevoEstatus,
+                cambiado_por: usuarioId,
+                fecha: new Date()
+            }, { transaction });
+            
+            // 7. REGISTRAR LA INSPECCIÓN (Detalle técnico)
+            const inspeccion = await InspeccionCalidad.create({
+                pieza_id: pieza.id,
+                resultado: resultado,
+                descripcion_falla: (resultado === 'OK') ? null : descripcion_falla,
+                revisado_por: usuarioId,
+                fecha: new Date()
+            }, { transaction });
+            
+            // Guardar todo
+            await transaction.commit();
+            
+            res.json({
+                success: true,
+                message: `Pieza ${pieza.serial} dictaminada como "${resultado}"`,
+                data: {
+                    serial: pieza.serial,
+                    estatus_anterior: estatusAnterior,
+                    estatus_nuevo: nuevoEstatus,
+                    inspeccion_id: inspeccion.id,
+                    cambiado_por: usuarioId
+                },
+                inspeccion: {
+                    id: inspeccion.id,
+                    resultado: inspeccion.resultado,
+                    descripcion_falla: inspeccion.descripcion_falla,
+                    revisado_por: usuarioId,
+                    fecha: inspeccion.fecha
+                }
+            });
+            
+        } catch (error) {
+            if (transaction) await transaction.rollback();
+            console.error('Error en inspección de calidad:', error);
+            res.status(500).json({
+                success: false,
+                message: "Error interno al procesar la inspección",
+                error: error.message
+            });
+        }
+    })
 );
 
 
-// API 2: CONSULTAR PIEZAS DE UNA ORDEN CON ESTATUS "EN CALIDAD"
-calidadRoute.get("/orden/:orden_id/piezas-en-calidad", 
+
+
+
+
+// API 2: CONSULTAR PIEZAS DE UNA ORDEN CON ESTATUS "EN CALIDAD" USANDO EL NÚMERO DE ORDEN
+calidadRoute.get("/orden/:numero_orden/piezas-en-calidad", 
     AsyncHandler(async (req, res) => {
         try {
-            const { orden_id } = req.params;
+            const { numero_orden } = req.params;
             
-            // Verificar que la orden existe
-            const orden = await OrdenTrabajo.findByPk(orden_id, {
+            // 1. Buscar la orden por numero_orden (ORD-KIA-011) para obtener su ID real
+            const orden = await OrdenTrabajo.findOne({
+                where: { numero_orden: numero_orden },
                 attributes: ['id', 'numero_orden', 'cantidad_planeada', 'estatus']
             });
             
             if (!orden) {
                 return res.status(404).json({
                     success: false,
-                    message: `Orden de trabajo con ID ${orden_id} no encontrada`
+                    message: `Orden de trabajo ${numero_orden} no encontrada`
                 });
             }
+
+            // Usamos el ID interno para las siguientes consultas
+            const ordenIdInterno = orden.id;
             
-            // Buscar todas las piezas de la orden con estatus "En Calidad"
+            // 2. Buscar todas las piezas de la orden con estatus "En Calidad"
             const piezasEnCalidad = await Pieza.findAll({
                 where: {
-                    orden_id: orden_id,
+                    orden_id: ordenIdInterno,
                     estatus: 'En Calidad'
                 },
                 include: [
@@ -189,35 +317,35 @@ calidadRoute.get("/orden/:orden_id/piezas-en-calidad",
                 order: [['id', 'ASC']]
             });
             
-            // Estadísticas de calidad
+            // 3. Estadísticas de calidad (usando el ID obtenido)
             const totalPiezasOrden = await Pieza.count({
-                where: { orden_id: orden_id }
+                where: { orden_id: ordenIdInterno }
             });
             
             const piezasEnProceso = await Pieza.count({
                 where: { 
-                    orden_id: orden_id,
+                    orden_id: ordenIdInterno,
                     estatus: 'En Proceso SMT'
                 }
             });
             
             const piezasOK = await Pieza.count({
                 where: { 
-                    orden_id: orden_id,
+                    orden_id: ordenIdInterno,
                     estatus: 'OK'
                 }
             });
             
             const piezasRetrabajo = await Pieza.count({
                 where: { 
-                    orden_id: orden_id,
+                    orden_id: ordenIdInterno,
                     estatus: 'Retrabajo'
                 }
             });
             
             const piezasScrap = await Pieza.count({
                 where: { 
-                    orden_id: orden_id,
+                    orden_id: ordenIdInterno,
                     estatus: 'Scrap'
                 }
             });
@@ -233,7 +361,7 @@ calidadRoute.get("/orden/:orden_id/piezas-en-calidad",
                         piezas_ok: piezasOK,
                         piezas_retrabajo: piezasRetrabajo,
                         piezas_scrap: piezasScrap,
-                        porcentaje_calidad: totalPiezasOrden > 0 
+                        porcentaje_pendiente_calidad: totalPiezasOrden > 0 
                             ? ((piezasEnCalidad.length / totalPiezasOrden) * 100).toFixed(2) + '%' 
                             : '0%'
                     },

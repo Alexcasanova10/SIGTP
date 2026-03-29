@@ -15,7 +15,7 @@ require('dotenv').config();
 
 
 // API ENVIAR PIEZA A CALIDAD (actualizar estatus a "En Calidad")
-operadorRoute.put("/enviar-a-calidad",AsyncHandler(async (req, res) => {
+/*operadorRoute.put("/enviar-a-calidad",AsyncHandler(async (req, res) => {
         const transaction = await sequelize.transaction();
         
         try {
@@ -98,9 +98,109 @@ operadorRoute.put("/enviar-a-calidad",AsyncHandler(async (req, res) => {
             });
         }
     })
-);
+);*/
 
- 
+operadorRoute.put("/enviar-a-calidad", AsyncHandler(async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+        const { serial } = req.body;
+        
+        // ID del usuario que realiza el cambio. 
+        // Si usas el middleware 'protect', usa: req.usuario.id
+        const usuarioId = 1; 
+
+        // 1. Validar que viene el serial
+        if (!serial) {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: "El serial de la pieza es requerido"
+            });
+        }
+        
+        // 2. Buscar la pieza por serial
+        const pieza = await Pieza.findOne({
+            where: { serial: serial },
+            include: [
+                {
+                    model: OrdenTrabajo,
+                    as: 'orden',
+                    attributes: ['id', 'numero_orden']
+                }
+            ],
+            transaction
+        });
+        
+        // 3. Verificar si la pieza existe
+        if (!pieza) {
+            await transaction.rollback();
+            return res.status(404).json({
+                success: false,
+                message: `Pieza con serial ${serial} no encontrada`
+            });
+        }
+        
+        // 4. Verificar estatus (Solo se envía a calidad si está en SMT o Retrabajo)
+        if (pieza.estatus !== 'En Proceso SMT' && pieza.estatus !== 'Retrabajo') {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: `La pieza está en "${pieza.estatus}". No se puede enviar a calidad.`,
+                estatus_actual: pieza.estatus
+            });
+        }
+        
+        const estatusAnterior = pieza.estatus;
+        const estatusNuevo = 'En Calidad';
+        
+        // 5. ACTUALIZAR ESTATUS DE LA PIEZA
+        await pieza.update({
+            estatus: estatusNuevo
+        }, { transaction });
+
+        // 6. REGISTRAR EL MOVIMIENTO EN LA TABLA MOVIMIENTOS
+        await Movimiento.create({
+            pieza_id: pieza.id,
+            estatus_anterior: estatusAnterior,
+            estatus_nuevo: estatusNuevo,
+            cambiado_por: usuarioId,
+            fecha: new Date()
+        }, { transaction });
+        
+        // 7. Commit de la transacción (Ambas operaciones se guardan)
+        await transaction.commit();
+        
+        // Respuesta exitosa
+        res.json({
+            success: true,
+            message: `Pieza ${serial} enviada a calidad y movimiento registrado`,
+            data: {
+                serial: pieza.serial,
+                movimiento: {
+                    de: estatusAnterior,
+                    a: estatusNuevo,
+                    usuario_id: usuarioId
+                },
+                orden: pieza.orden ? pieza.orden.numero_orden : null,
+                fecha: new Date()
+            }
+        });
+        
+    } catch (error) {
+        // Si algo falla, se deshace la actualización y el movimiento
+        if (transaction) await transaction.rollback();
+        console.error('Error enviando pieza a calidad:', error);
+        res.status(500).json({
+            success: false,
+            message: "Error interno al procesar el envío a calidad",
+            error: error.message
+        });
+    }
+}));
+
+
+
 // API CONSULTAR PIEZA POR SERIAL (CORREGIDA)
 operadorRoute.get("/pieza/serial/:serial", 
     AsyncHandler(async (req, res) => {
@@ -146,70 +246,83 @@ operadorRoute.get("/pieza/serial/:serial",
 );
 
 // API LISTAR TODAS LAS PIEZAS POR ORDEN DE TRABAJO (SIN PAGINACIÓN - TODAS)
-operadorRoute.get("/piezas/orden/:orden_id/all", 
+operadorRoute.get("/orden-trabajo/estadistica/:numero_orden", 
     AsyncHandler(async (req, res) => {
         try {
-            const { orden_id } = req.params;
-            const { estatus } = req.query;
+            const { numero_orden } = req.params;
             
-            const where = { orden_id: orden_id };
-            if (estatus) {
-                where.estatus = estatus;
+            // 1. IMPORTANTE: Usar 'include' para traer las piezas asociadas
+            const orden = await OrdenTrabajo.findOne({
+                where: { numero_orden: numero_orden },
+                include: [{
+                    model: Pieza,
+                    as: 'piezas' // Asegúrate de que este alias coincida con tu definición en index.js o la relación
+                }]
+            });
+            
+            if (!orden) {
+                return res.status(404).json({
+                    success: false,
+                    message: `Orden de trabajo ${numero_orden} no encontrada`
+                });
             }
             
-            // Obtener todas las piezas sin paginación
-            const piezas = await Pieza.findAll({
-                where,
-                include: [
-                    {
-                        model: Estacion,
-                        as: 'estacion',  // CORREGIDO: usa 'estacion' no 'estacion'
-                        attributes: ['id', 'nombre', 'descripcion']
-                    }
-                ],
-                order: [['id', 'ASC']]
-            });
+            // 2. Extraer las piezas (si no hay, inicializar como array vacío)
+            const listaPiezas = orden.piezas || [];
             
-            // Obtener información de la orden
-            const orden = await OrdenTrabajo.findByPk(orden_id, {
-                attributes: ['id', 'numero_orden', 'cantidad_planeada', 'estatus']
-            });
+            // 3. Cálculos de estadísticas
+            const totalPiezas = listaPiezas.length;
+            const piezasEnProceso = listaPiezas.filter(p => p.estatus === 'En Proceso SMT').length;
+            const piezasEnCalidad = listaPiezas.filter(p => p.estatus === 'En Calidad').length;
+            const piezasOK = listaPiezas.filter(p => p.estatus === 'OK').length;
+            const piezasRetrabajo = listaPiezas.filter(p => p.estatus === 'Retrabajo').length;
+            const piezasScrap = listaPiezas.filter(p => p.estatus === 'Scrap').length;
             
-            // Estadísticas de la orden
-            const totalPiezas = piezas.length;
-            const piezasEnProceso = piezas.filter(p => p.estatus === 'En Proceso SMT').length;
-            const piezasEnCalidad = piezas.filter(p => p.estatus === 'En Calidad').length;
-            const piezasOK = piezas.filter(p => p.estatus === 'OK').length;
-            const piezasRetrabajo = piezas.filter(p => p.estatus === 'Retrabajo').length;
-            const piezasScrap = piezas.filter(p => p.estatus === 'Scrap').length;
+            // 4. Calcular avance evitando el NaN (si total es 0)
+            const porcentajeAvance = totalPiezas > 0 
+                ? ((piezasOK / totalPiezas) * 100).toFixed(2) 
+                : "0.00";
             
-            res.json({
+            res.json({  
                 success: true,
                 data: {
-                    orden: orden,
+                    orden: {
+                        id: orden.id,
+                        numero_orden: orden.numero_orden,
+                        cantidad_planeada: orden.cantidad_planeada,
+                        proyecto: orden.proyecto,
+                        estatus: orden.estatus,
+                        fecha_inicio: orden.fecha_inicio
+                    },
                     estadisticas: {
                         total: totalPiezas,
-                        planeadas: orden ? orden.cantidad_planeada : totalPiezas,
                         en_proceso_smt: piezasEnProceso,
                         en_calidad: piezasEnCalidad,
                         ok: piezasOK,
                         retrabajo: piezasRetrabajo,
                         scrap: piezasScrap,
-                        avance: totalPiezas > 0 ? ((piezasOK / totalPiezas) * 100).toFixed(2) + '%' : '0%'
+                        avance: `${porcentajeAvance}%`
                     },
-                    piezas: piezas
+                    // Opcional: lista de seriales para el front-end
+                    detalle_piezas: listaPiezas.map(p => ({
+                        serial: p.serial,
+                        estatus: p.estatus
+                    }))
                 }
             });
             
         } catch (error) {
-            console.error('Error listando piezas:', error);
+            console.error('Error consultando estadísticas:', error);
             res.status(500).json({
                 success: false,
-                message: "Error al listar las piezas"
+                message: "Error interno al procesar estadísticas"
             });
         }
     })
 );
+
+
+
 
 // **********************APIS MENOS RELEVANTES*************************
 
@@ -349,5 +462,5 @@ operadorRoute.put("/pieza/:id/estatus",
         }
     })
 );
-
+2
 module.exports = operadorRoute;

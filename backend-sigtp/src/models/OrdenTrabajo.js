@@ -16,6 +16,11 @@ const OrdenTrabajo = sequelize.define('ordenes_trabajo', {
         type: DataTypes.INTEGER,
         allowNull: false
     },
+    proyecto: {
+        type: DataTypes.ENUM('KIA', 'TOYOTA'),
+        allowNull: false
+    },
+
     estatus: {
         type: DataTypes.ENUM('Planeada', 'En Proceso', 'Pausada', 'Finalizada'),
         defaultValue: 'Planeada'
