@@ -74,6 +74,7 @@ const protectedRoute = require("./src/routes/SesionUsuario/protegidasRoutes")
 const supervisorRoute = require("./src/routes/Perfiles/apis-supervisor")
 const operadorRoute = require("./src/routes/Perfiles/apis-operador.js")
 const calidadRoute = require("./src/routes/Perfiles/apis-calidad.js")
+const gerenteRoute = require("./src/routes/Perfiles/apis-gerente.js")
 
 
 //Route SesionesUsuario
@@ -91,23 +92,10 @@ app.use("/api/operador",operadorRoute)
 //Route calidad
 app.use("/api/calidad",calidadRoute)
 
-/*
-
-const gerenteRoute = require("./routes/Usuarios/gerente-apis-.js")
-const ingRoute = require("./routes/Usuarios/apis-ing-procesos.js")
-const tecnicoRoute = require("./routes/Usuarios/apis-tecnico.js")
-
-
 //Route gerente
-app.use("/api/usuarios",gerenteRoute)
-
-//Route ing
-app.use("/api/ing",ingRoute)
+app.use("/api/gerente",gerenteRoute)
 
 
-//Route tecnico
-app.use("/api/tecnico",tecnicoRoute)
-*/
 
 // Middleware para rutas no encontradas
 app.use((req, res, next) => {

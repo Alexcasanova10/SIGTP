@@ -15,141 +15,7 @@ require('dotenv').config();
 
 
 // API 1: PARA ACTUALIZAR ESTADO DE PIEZA Y REGISTRAR INSPECCIÓN DE CALIDAD //OMITIR MIDDLWARE POR EL MOMENTO
-/*calidadRoute.put("/actualizar-estado-pieza/:id", 
-    // protect, // COMENTADO TEMPORALMENTE HASTA QUE EL MIDDLEWARE ESTÉ LISTO , NO TOMAR EN CUENTA
-    AsyncHandler(async (req, res) => {
-        const transaction = await sequelize.transaction();
-        
-        try {
-            const { id } = req.params;
-            const { resultado, descripcion_falla } = req.body;
-            
-            // Validar que el resultado sea válido
-            const resultadosValidos = ['OK', 'Retrabajo', 'Scrap'];
-            if (!resultado || !resultadosValidos.includes(resultado)) {
-                await transaction.rollback();
-                return res.status(400).json({
-                    success: false,
-                    message: `Resultado inválido. Debe ser uno de: ${resultadosValidos.join(', ')}`
-                });
-            }
-            
-            // Validar descripción de falla solo para Retrabajo o Scrap
-            if ((resultado === 'Retrabajo' || resultado === 'Scrap') && !descripcion_falla) {
-                await transaction.rollback();
-                return res.status(400).json({
-                    success: false,
-                    message: `Para resultado "${resultado}" es obligatorio proporcionar una descripción de la falla`
-                });
-            }
-            
-            // Buscar la pieza
-            const pieza = await Pieza.findByPk(id, { 
-                transaction,
-                include: [
-                    {
-                        model: OrdenTrabajo,
-                        as: 'orden',
-                        attributes: ['id', 'numero_orden', 'estatus']
-                    }
-                ]
-            });
-            
-            if (!pieza) {
-                await transaction.rollback();
-                return res.status(404).json({
-                    success: false,
-                    message: `Pieza con ID ${id} no encontrada`
-                });
-            }
-            
-            // Verificar que la pieza esté en estado "En Calidad"
-            if (pieza.estatus !== 'En Calidad') {
-                await transaction.rollback();
-                return res.status(400).json({
-                    success: false,
-                    message: `La pieza está en estado "${pieza.estatus}". Solo se pueden inspeccionar piezas en estado "En Calidad"`,
-                    estatus_actual: pieza.estatus
-                });
-            }
-            
-            // TEMPORAL: Usar un usuario fijo (ID 1) hasta que tengas el middleware
-            // Asegúrate de que exista un usuario con ID 4 en tu base de datos
-            const usuarioId = 4; // Cambia esto por un ID que exista en tu tabla usuarios
-            
-            // Verificar que el usuario existe (opcional, para evitar errores)
-            const usuarioExiste = await Usuario.findByPk(usuarioId, { transaction });
-            if (!usuarioExiste) {
-                await transaction.rollback();
-                return res.status(400).json({
-                    success: false,
-                    message: `El usuario con ID ${usuarioId} no existe en la base de datos. Por favor, verifica.`
-                });
-            }
-            
-            // Guardar estado anterior
-            const estatusAnterior = pieza.estatus;
-            
-            // Actualizar el estado de la pieza según el resultado
-            let nuevoEstatus;
-            if (resultado === 'OK') {
-                nuevoEstatus = 'OK';
-            } else if (resultado === 'Retrabajo') {
-                nuevoEstatus = 'Retrabajo';
-            } else if (resultado === 'Scrap') {
-                nuevoEstatus = 'Scrap';
-            }
-            
-            await pieza.update({
-                estatus: nuevoEstatus
-            }, { transaction });
-            
-            // Crear el registro de inspección de calidad
-            const inspeccion = await InspeccionCalidad.create({
-                pieza_id: pieza.id,
-                resultado: resultado,
-                descripcion_falla: (resultado === 'OK') ? null : descripcion_falla,
-                revisado_por: usuarioId,
-                fecha: new Date()
-            }, { transaction });
-            
-            await transaction.commit();
-            
-            // Respuesta exitosa
-            res.json({
-                success: true,
-                message: `Pieza ${pieza.serial} inspeccionada y marcada como "${resultado}"`,
-                data: {
-                    pieza: {
-                        id: pieza.id,
-                        serial: pieza.serial,
-                        estatus_anterior: estatusAnterior,
-                        estatus_nuevo: nuevoEstatus,
-                        orden: pieza.orden
-                    },
-                    inspeccion: {
-                        id: inspeccion.id,
-                        resultado: inspeccion.resultado,
-                        descripcion_falla: inspeccion.descripcion_falla,
-                        revisado_por: usuarioId,
-                        fecha: inspeccion.fecha
-                    }
-                }
-            });
-            
-        } catch (error) {
-            await transaction.rollback();
-            console.error('Error en inspección de calidad:', error);
-            res.status(500).json({
-                success: false,
-                message: "Error interno al procesar la inspección de calidad",
-                error: error.message
-            });
-        }
-    })
-);*/
 
-// API: ACTUALIZAR ESTADO DE PIEZA POR SERIAL Y REGISTRAR MOVIMIENTO
 calidadRoute.put("/actualizar-estado-pieza/:serial", 
     AsyncHandler(async (req, res) => {
         const transaction = await sequelize.transaction();
@@ -470,6 +336,84 @@ calidadRoute.get("/todas-piezas-en-calidad",
             res.status(500).json({
                 success: false,
                 message: "Error al consultar las piezas en calidad"
+            });
+        }
+    })
+);
+
+// API 5: OBTENER HISTORIAL DE MOVIMIENTOS DE UNA PIEZA POR SERIAL
+calidadRoute.get("/pieza/:serial/historial", 
+    AsyncHandler(async (req, res) => {
+        try {
+            const { serial } = req.params;
+
+            // 1. Buscar la pieza para validar que existe y obtener su ID
+            const pieza = await Pieza.findOne({
+                where: { serial: serial },
+                attributes: ['id', 'serial', 'estatus', 'fecha_registro'],
+                include: [
+                    {
+                        model: OrdenTrabajo,
+                        as: 'orden',
+                        attributes: ['numero_orden', 'proyecto']
+                    }
+                ]
+            });
+
+            if (!pieza) {
+                return res.status(404).json({
+                    success: false,
+                    message: `La pieza con serial ${serial} no existe.`
+                });
+            }
+
+            // 2. Buscar todos los movimientos asociados a ese pieza_id
+            const movimientos = await Movimiento.findAll({
+                where: { pieza_id: pieza.id },
+                include: [
+                    {
+                        model: Usuario,
+                        // El alias debe coincidir con el que definiste en tu index.js/relaciones
+                        // Si no pusiste alias, bórralo o usa el nombre del modelo
+                        attributes: ['id', 'nombre', 'numero_empleado'] 
+                    }
+                ],
+                order: [['fecha', 'DESC']] // De más reciente a más antiguo
+            });
+
+            // 3. Responder con la info de la pieza y su lista de movimientos
+            res.json({
+                success: true,
+                count: movimientos.length,
+                data: {
+                    pieza: {
+                        id: pieza.id,
+                        serial: pieza.serial,
+                        estatus_actual: pieza.estatus,
+                        orden: pieza.orden ? pieza.orden.numero_orden : null,
+                        proyecto: pieza.orden ? pieza.orden.proyecto : null,
+                        fecha_creacion: pieza.fecha_registro
+                    },
+                    historial: movimientos.map(m => ({
+                        id: m.id,
+                        estatus_anterior: m.estatus_anterior,
+                        estatus_nuevo: m.estatus_nuevo,
+                        fecha: m.fecha,
+                        usuario: m.usuario ? {
+                            id: m.usuario.id,
+                            nombre: m.usuario.nombre,
+                            numero_empleado: m.usuario.numero_empleado
+                        } : "Sistema / Desconocido"
+                    }))
+                }
+            });
+
+        } catch (error) {
+            console.error('Error al obtener historial de la pieza:', error);
+            res.status(500).json({
+                success: false,
+                message: "Error interno al obtener el historial",
+                error: error.message
             });
         }
     })
