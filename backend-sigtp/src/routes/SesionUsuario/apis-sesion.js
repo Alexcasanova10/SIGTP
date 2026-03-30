@@ -229,6 +229,7 @@ usuarioRoute.post("/login",
                         //     nombre: usuario.rol.nombre,
                         //     descripcion: usuario.rol.descripcion
                         // },
+                        rol_id: usuario.rol_id,
                         activo: usuario.activo
                     },
                     // redireccion: {
