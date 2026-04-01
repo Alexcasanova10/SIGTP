@@ -148,25 +148,26 @@ usuarioRoute.post("/registro-usuario", AsyncHandler(async (req, res) => {
 usuarioRoute.post("/login", 
     AsyncHandler(async (req, res) => {
         try {
-            const { nombre, password } = req.body;
+            // const { nombre, password } = req.body;
+            const { numero_empleado, password } = req.body;
 
             // Validar que vengan los campos requeridos
-            if (!nombre || !password) {
+            if (!numero_empleado || !password) {
                 return res.status(400).json({
                     success: false,
-                    message: "Nombre de usuario y contraseña son requeridos"
+                    message: "Número de empleado y contraseña son requeridos"
                 });
             }
 
             // Buscar usuario por nombre e incluir su rol
             const usuario = await Usuario.findOne({
                 where: { 
-                    nombre: nombre,
+                    numero_empleado: numero_empleado,
                     activo: true // Solo usuarios activos pueden iniciar sesión
                 },
                 include: [{
                     model: Rol,
-                    attributes: ['id', 'nombre', 'descripcion']
+                    attributes: ['id','nombre', 'descripcion']
                 }]
             });
 
@@ -174,7 +175,7 @@ usuarioRoute.post("/login",
             if (!usuario) {
                 return res.status(401).json({
                     success: false,
-                    message: "Credenciales inválidas nombre"
+                    message: "Número de empleado inválido"
                 });
             }
 
