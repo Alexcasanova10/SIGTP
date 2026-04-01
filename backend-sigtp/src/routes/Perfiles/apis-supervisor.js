@@ -333,12 +333,6 @@ supervisorRoute.post("/generar-orden-trabajo",
 );
 
 
-
-
-
-
-
-
 // API CONSULTAR ORDEN DE TRABAJO CON SUS PIEZAS
 supervisorRoute.get("/orden-trabajo/numero/:numero_orden", 
     AsyncHandler(async (req, res) => {
@@ -435,8 +429,6 @@ supervisorRoute.get("/orden-trabajo/estadistica/:numero_orden",
 );
 
 
-
-
 // API LISTAR TODAS LAS ÓRDENES DE TRABAJO
 supervisorRoute.get("/ordenes-trabajo", 
     AsyncHandler(async (req, res) => {
@@ -504,6 +496,7 @@ supervisorRoute.get("/ordenes-trabajo",
     })
 );
 
+
 // API ACTUALIZAR ESTATUS DE ORDEN
 supervisorRoute.put("/orden-trabajo/:numero_orden/estatus", 
     AsyncHandler(async (req, res) => {
@@ -566,7 +559,6 @@ supervisorRoute.put("/orden-trabajo/:numero_orden/estatus",
         }
     })
 );
-
 
 //------------------APIS MENOS RELEVANTES, PERO ÚTILES
 
