@@ -75,6 +75,15 @@ const supervisorRoute = require("./src/routes/Perfiles/apis-supervisor")
 const operadorRoute = require("./src/routes/Perfiles/apis-operador.js")
 const calidadRoute = require("./src/routes/Perfiles/apis-calidad.js")
 const gerenteRoute = require("./src/routes/Perfiles/apis-gerente.js")
+const loginMovilRoute = require("./src/routes/movilFunciones/loginMovil")
+const apiIngenieroRoute = require("./src/routes/movilFunciones/apiIngeniero")
+const apiTecnicoRoute = require("./src/routes/movilFunciones/apiTecnico")
+const crudUsuariosRoute = require("./src/routes/movilFunciones/crudUsuarios")
+const getFallasRoute = require("./src/routes/movilFunciones/getFallas")
+const getGerenteDataRoute = require("./src/routes/movilFunciones/getGerenteData")
+const getOpcionesReporteRoute = require("./src/routes/movilFunciones/getOpcionesReporte")
+const insertarReportesRoute = require("./src/routes/movilFunciones/insertarReportes")
+const obtenerFallasGeneralesRoute = require("./src/routes/movilFunciones/obtenerFallasGenerales")
 
 
 //Route SesionesUsuario
@@ -94,6 +103,17 @@ app.use("/api/calidad",calidadRoute)
 
 //Route gerente
 app.use("/api/gerente",gerenteRoute)
+
+//Rutas móviles (login y APIs móviles)
+app.use("/api/movil",loginMovilRoute)
+app.use("/api/movil",apiIngenieroRoute)
+app.use("/api/movil",apiTecnicoRoute)
+app.use("/api/movil",crudUsuariosRoute)
+app.use("/api/movil",getFallasRoute)
+app.use("/api/movil",getGerenteDataRoute)
+app.use("/api/movil",getOpcionesReporteRoute)
+app.use("/api/movil",insertarReportesRoute)
+app.use("/api/movil",obtenerFallasGeneralesRoute)
 
 
 
