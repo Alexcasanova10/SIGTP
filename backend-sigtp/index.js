@@ -84,6 +84,7 @@ const getGerenteDataRoute = require("./src/routes/movilFunciones/getGerenteData"
 const getOpcionesReporteRoute = require("./src/routes/movilFunciones/getOpcionesReporte")
 const insertarReportesRoute = require("./src/routes/movilFunciones/insertarReportes")
 const obtenerFallasGeneralesRoute = require("./src/routes/movilFunciones/obtenerFallasGenerales")
+const gestionParosRoute = require("./src/routes/movilFunciones/gestionParos")
 
 
 //Route SesionesUsuario
@@ -114,6 +115,7 @@ app.use("/api/movil",getGerenteDataRoute)
 app.use("/api/movil",getOpcionesReporteRoute)
 app.use("/api/movil",insertarReportesRoute)
 app.use("/api/movil",obtenerFallasGeneralesRoute)
+app.use("/api/movil",gestionParosRoute)
 
 
 

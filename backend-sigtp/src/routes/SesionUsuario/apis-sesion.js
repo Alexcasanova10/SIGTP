@@ -225,6 +225,7 @@ usuarioRoute.post("/login",
                         id: usuario.id,
                         nombre: usuario.nombre,
                         numero_empleado: usuario.numero_empleado,
+                        rol_id: usuario.rol_id,
                         // rol: {
                         //     id: usuario.rol.id,
                         //     nombre: usuario.rol.nombre,
